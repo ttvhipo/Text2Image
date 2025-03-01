@@ -1,6 +1,7 @@
 import os
 import requests
 from flask import Flask, request, jsonify, send_file
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
@@ -8,11 +9,14 @@ app = Flask(__name__)
 API_URL = os.getenv("API_URL", "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0")
 API_KEY = os.getenv("API_KEY")
 
-# Check if API_KEY is missing
 if not API_KEY:
     raise ValueError("Missing API_KEY! Set it in Railway environment variables.")
 
 HEADERS = {"Authorization": f"Bearer {API_KEY}"}
+
+# Folder to store images
+IMAGE_FOLDER = "static"
+os.makedirs(IMAGE_FOLDER, exist_ok=True)
 
 @app.route('/')
 def home():
@@ -33,13 +37,17 @@ def generate_image():
         response = requests.post(API_URL, headers=HEADERS, json={"inputs": prompt})
 
         print(f"🔹 API Response Status: {response.status_code}")  # Log API response status
-        print(f"🔹 API Response Content: {response.text[:500]}")  # Log first 500 chars of response
 
         if response.status_code == 200:
-            image_path = "output.png"
+            filename = secure_filename(f"{prompt[:20].replace(' ', '_')}.png")
+            image_path = os.path.join(IMAGE_FOLDER, filename)
+
+            # Save image
             with open(image_path, "wb") as f:
                 f.write(response.content)
-            return send_file(image_path, mimetype="image/png")
+
+            image_url = f"/static/{filename}"  # Serve the image from Flask static folder
+            return jsonify({"image_url": image_url})
 
         return jsonify({"error": response.text}), response.status_code
 
